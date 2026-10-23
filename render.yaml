@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: transaction-webhook-service
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
+    healthCheckPath: /
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: transactions-db
+          property: connectionString
+      - key: PYTHON_VERSION
+        value: "3.12.6"
+
+databases:
+  - name: transactions-db
+    plan: free
+    databaseName: transactions
+    user: transactions
