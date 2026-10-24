@@ -16,7 +16,7 @@ Interactive docs are served at `/docs`.
 
 ```console
 $ curl -s localhost:8000/
-{"status":"HEALTHY","current_time":"2026-10-23T09:56:44Z"}
+{"status":"HEALTHY","current_time":"2026-10-23T09:56:44 IST"}
 ```
 
 ### Send a webhook (returns immediately)
