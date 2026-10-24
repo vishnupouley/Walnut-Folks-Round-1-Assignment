@@ -1,13 +1,16 @@
 """End-to-end tests against the real ASGI app (requirements 1-6)."""
 
 import time
+from datetime import timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app import main as main_module
-from app.db import SessionLocal, Transaction, utcnow
+from app.db import SessionLocal, Transaction, istnow
 from app.main import app
+
+IST = timezone(timedelta(hours=5, minutes=30))
 
 
 def payload(**overrides):
@@ -145,6 +148,7 @@ def test_duplicate_after_completion_does_not_alter_result(client):
 
 def test_interrupted_transactions_are_recovered_on_startup():
     """A row left in PROCESSING by a crash is finished after restart."""
+    now_ist = istnow()
     with SessionLocal() as session:
         session.add(
             Transaction(
@@ -154,7 +158,7 @@ def test_interrupted_transactions_are_recovered_on_startup():
                 amount=10,
                 currency="INR",
                 status="PROCESSING",
-                created_at=utcnow(),
+                created_at=now_ist,
                 processed_at=None,
             )
         )

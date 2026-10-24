@@ -1,12 +1,20 @@
 """Database engine, session factory and the transactions table."""
 
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
 from sqlalchemy import DateTime, Numeric, String, create_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
+
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def istnow() -> datetime:
+    """Current time in Indian Standard Time (IST)."""
+    return datetime.now(IST)
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -53,10 +61,6 @@ class Transaction(Base):
     processed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-
-
-def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 def init_db() -> None:

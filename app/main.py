@@ -11,13 +11,14 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .db import Transaction, get_session, init_db, utcnow
+from .db import Transaction, get_session, init_db, istnow, utcnow
 from .processing import interrupted_transaction_ids, process_transaction
 from .schemas import (
     HealthResponse,
     TransactionCreate,
     TransactionResponse,
     WebhookAck,
+    format_ist,
 )
 
 logger = logging.getLogger(__name__)
@@ -39,14 +40,11 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(title="Transaction Webhook Service", lifespan=lifespan)
 
-
 @app.get("/", response_model=HealthResponse)
 def health() -> HealthResponse:
-    now_utc = utcnow()
-    now_ist = now_utc.astimezone(IST)
     return HealthResponse(
         status="HEALTHY",
-        current_time=now_ist.strftime("%Y-%m-%dT%H:%M:%S IST"),
+        current_time=format_ist(istnow()),
     )
 
 
@@ -67,7 +65,7 @@ def receive_webhook(
         amount=payload.amount,
         currency=payload.currency,
         status="PROCESSING",
-        created_at=utcnow(),
+        created_at=istnow(),
         processed_at=None,
     )
     session.add(transaction)

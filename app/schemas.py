@@ -1,16 +1,23 @@
 """Request/response models (Pydantic v2)."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
+IST = timezone(timedelta(hours=5, minutes=30))
 
-def iso_z(value: datetime) -> str:
-    """ISO-8601 UTC with the trailing Z the spec (and most payment APIs) use."""
+
+def format_ist(value: datetime) -> str:
+    """Format datetime in IST: YYYY-MM-DDTHH:MM:SS IST"""
     if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        value = value.replace(tzinfo=IST)
+    else:
+        value = value.astimezone(IST)
+    return value.strftime("%Y-%m-%dT%H:%M:%S IST")
+
+
+iso_z = format_ist  # alias for backward compatibility
 
 
 class TransactionCreate(BaseModel):

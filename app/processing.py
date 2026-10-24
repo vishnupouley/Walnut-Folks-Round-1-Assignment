@@ -6,7 +6,7 @@ import os
 
 from sqlalchemy import select
 
-from .db import SessionLocal, Transaction, utcnow
+from .db import SessionLocal, Transaction, istnow
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ def _mark_processed(transaction_id: str) -> None:
         if transaction is None or transaction.status == "PROCESSED":
             return
         transaction.status = "PROCESSED"
-        transaction.processed_at = utcnow()
+        transaction.processed_at = istnow()
         session.commit()
 
 
