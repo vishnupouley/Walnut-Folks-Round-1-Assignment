@@ -31,7 +31,7 @@ def test_health_check(client):
     body = response.json()
     assert body["status"] == "HEALTHY"
     # ISO-8601 UTC with a trailing Z, parseable by clients.
-    time.strptime(body["current_time"], "%Y-%m-%dT%H:%M:%S+05:30")
+    time.strptime(body["current_time"], "%Y-%m-%dT%H:%M:%S IST")
 
 
 # --- Requirement 2: webhook accepts fast with 202 --------------------------

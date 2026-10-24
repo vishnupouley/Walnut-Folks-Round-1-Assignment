@@ -46,7 +46,7 @@ def health() -> HealthResponse:
     now_ist = now_utc.astimezone(IST)
     return HealthResponse(
         status="HEALTHY",
-        current_time=now_ist.strftime("%Y-%m-%dT%H:%M:%S+05:30"),
+        current_time=now_ist.strftime("%Y-%m-%dT%H:%M:%S IST"),
     )
 
 
