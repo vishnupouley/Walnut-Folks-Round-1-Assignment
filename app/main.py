@@ -11,9 +11,9 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .db import Transaction, get_session, init_db, istnow, utcnow
-from .processing import interrupted_transaction_ids, process_transaction
-from .schemas import (
+from app.db import Transaction, get_session, init_db, istnow
+from app.processing import interrupted_transaction_ids, process_transaction
+from app.schemas import (
     HealthResponse,
     TransactionCreate,
     TransactionResponse,

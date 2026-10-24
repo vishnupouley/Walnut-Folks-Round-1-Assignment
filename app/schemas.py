@@ -17,9 +17,6 @@ def format_ist(value: datetime) -> str:
     return value.strftime("%Y-%m-%dT%H:%M:%S IST")
 
 
-iso_z = format_ist  # alias for backward compatibility
-
-
 class TransactionCreate(BaseModel):
     transaction_id: str = Field(min_length=1, max_length=128)
     source_account: str = Field(min_length=1, max_length=128)
@@ -56,7 +53,7 @@ class TransactionResponse(BaseModel):
 
     @field_serializer("created_at", "processed_at")
     def _serialize_timestamps(self, value: datetime | None) -> str | None:
-        return None if value is None else iso_z(value)
+        return None if value is None else format_ist(value)
 
 
 class WebhookAck(BaseModel):

@@ -6,7 +6,7 @@ import os
 
 from sqlalchemy import select
 
-from .db import SessionLocal, Transaction, istnow
+from app.db import SessionLocal, Transaction, istnow
 
 logger = logging.getLogger(__name__)
 

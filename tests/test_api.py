@@ -1,7 +1,6 @@
 """End-to-end tests against the real ASGI app (requirements 1-6)."""
 
 import time
-from datetime import timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -9,8 +8,6 @@ from fastapi.testclient import TestClient
 from app import main as main_module
 from app.db import SessionLocal, Transaction, istnow
 from app.main import app
-
-IST = timezone(timedelta(hours=5, minutes=30))
 
 
 def payload(**overrides):
@@ -33,7 +30,6 @@ def test_health_check(client):
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "HEALTHY"
-    # ISO-8601 UTC with a trailing Z, parseable by clients.
     time.strptime(body["current_time"], "%Y-%m-%dT%H:%M:%S IST")
 
 
