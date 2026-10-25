@@ -70,7 +70,7 @@ def test_query_returns_404_for_unknown_transaction(client):
 
 def test_transaction_is_processed_after_delay(client):
     client.post(
-        "/v1/webhooks/transactions", json=payload(amount=150.50, currency="USD")
+        "/v1/webhooks/transactions", json=payload(amount=150.50, currency="INR")
     )
     body = client.get("/v1/transactions/txn_abc123def456").json()
 
@@ -80,7 +80,7 @@ def test_transaction_is_processed_after_delay(client):
     assert transaction["processed_at"] is not None
     assert transaction["processed_at"] >= transaction["created_at"]
     assert transaction["amount"] == 150.50
-    assert transaction["currency"] == "USD"
+    assert transaction["currency"] == "INR"
     assert set(transaction) == {
         "transaction_id",
         "source_account",
@@ -188,6 +188,6 @@ def test_invalid_payloads_are_rejected(client, bad_payload, reason):
 
 
 def test_currency_is_normalized_to_uppercase(client):
-    client.post("/v1/webhooks/transactions", json=payload(currency="usd"))
+    client.post("/v1/webhooks/transactions", json=payload(currency="inr"))
     body = client.get("/v1/transactions/txn_abc123def456").json()
-    assert body[0]["currency"] == "USD"
+    assert body[0]["currency"] == "INR"

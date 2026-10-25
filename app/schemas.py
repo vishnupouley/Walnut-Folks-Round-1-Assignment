@@ -23,7 +23,7 @@ class TransactionCreate(BaseModel):
     destination_account: str = Field(min_length=1, max_length=128)
     # Decimal so money is never binary-float rounded; JSON ints/floats still parse.
     amount: Decimal = Field(gt=0, max_digits=18, decimal_places=2)
-    currency: str = Field(min_length=3, max_length=3)
+    currency: str = Field(default="INR", min_length=3, max_length=3)
 
     @field_validator("transaction_id", "source_account", "destination_account")
     @classmethod

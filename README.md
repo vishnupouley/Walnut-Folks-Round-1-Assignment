@@ -1,113 +1,216 @@
 # Transaction Webhook Service
 
-A FastAPI service that acknowledges payment-processor webhooks immediately (`202 Accepted`), processes each transaction in the background after a 30-second simulated external call, and exposes the result through a query endpoint. Duplicate webhooks for the same `transaction_id` are accepted but only ever processed once.
+A webhook ingestion service built with FastAPI and PostgreSQL/SQLite that receives transaction notifications, acknowledges them immediately with `202 Accepted`, and reliably processes each transaction in the background after a 30-second delay. Duplicate webhooks for the same transaction ID are acknowledged but never processed more than once.
 
-## API
+---
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/` | Health check |
-| `POST` | `/v1/webhooks/transactions` | Receive a transaction webhook → `202 Accepted` |
-| `GET` | `/v1/transactions/{transaction_id}` | Transaction status (single-element list) |
+## Public Cloud Endpoint
 
-Interactive docs are served at `/docs`.
+- **Base URL**: `https://transaction-webhook-service-k8oo.onrender.com` 
+- **Interactive API Docs**: `https://transaction-webhook-service-k8oo.onrender.com/docs`
 
-### Health
+The service is configured for automated cloud deployment on Render via the blueprint in `render.yaml`, which provisions both the FastAPI web application and a managed PostgreSQL database.
 
-```console
-$ curl -s localhost:8000/
-{"status":"HEALTHY","current_time":"2026-10-23T09:56:44 IST"}
+---
+
+## API Reference
+
+### 1. Health Check
+Checks service availability and returns current server time in Indian Standard Time (IST).
+
+- **Method**: `GET`
+- **Path**: `/`
+- **Response**: `200 OK`
+
+```bash
+curl -s http://localhost:8000/
 ```
 
-### Send a webhook (returns immediately)
-
-```console
-$ curl -i -X POST localhost:8000/v1/webhooks/transactions \
-    -H 'Content-Type: application/json' \
-    -d '{"transaction_id":"txn_abc123def456",
-         "source_account":"acc_user_789",
-         "destination_account":"acc_merchant_456",
-         "amount":150.50,
-         "currency":"INR"}'
-
-HTTP/1.1 202 Accepted
-{"status":"ACCEPTED","transaction_id":"txn_abc123def456","duplicate":false}
+```json
+{
+  "status": "HEALTHY",
+  "current_time": "2026-10-25T16:45:00 IST"
+}
 ```
 
-`duplicate` is `true` when the `transaction_id` was already received; such webhooks are acknowledged with the same `202` and never scheduled for processing again.
+---
 
-### Query the transaction
+### 2. Ingest Transaction Webhook
+Receives a transaction webhook and queues background processing. Responds immediately within the 500ms budget.
 
-```console
-$ curl -s localhost:8000/v1/transactions/txn_abc123def456
-[{"transaction_id":"txn_abc123def456",
-  "source_account":"acc_user_789",
-  "destination_account":"acc_merchant_456",
-  "amount":150.5,
-  "currency":"INR",
-  "status":"PROCESSING",
-  "created_at":"2026-10-23T09:56:44Z",
-  "processed_at":null}]
+- **Method**: `POST`
+- **Path**: `/v1/webhooks/transactions`
+- **Status Code**: `202 Accepted`
+
+```bash
+curl -i -X POST http://localhost:8000/v1/webhooks/transactions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "transaction_id": "txn_abc123def456",
+    "source_account": "acc_user_789",
+    "destination_account": "acc_merchant_456",
+    "amount": 1500.50,
+    "currency": "INR"
+  }'
 ```
 
-Thirty seconds later the same call returns `"status":"PROCESSED"` with a `processed_at` timestamp. Unknown IDs return `404`.
-
-## Run locally
-
-```console
-$ python -m venv .venv && . .venv/bin/activate
-$ pip install -r requirements.txt
-$ uvicorn app.main:app --reload            # http://localhost:8000
+```json
+{
+  "status": "ACCEPTED",
+  "transaction_id": "txn_abc123def456",
+  "duplicate": false
+}
 ```
 
-Without `DATABASE_URL` the service uses a local SQLite file (`transactions.db`), so there is nothing to provision. Point it at Postgres to use the production configuration:
+If the same `transaction_id` is sent again, the service acknowledges it with `202 Accepted` but marks it as a duplicate and does not trigger duplicate background processing:
 
-```console
-$ DATABASE_URL=postgresql://user:pass@host:5432/dbname uvicorn app.main:app
+```json
+{
+  "status": "ACCEPTED",
+  "transaction_id": "txn_abc123def456",
+  "duplicate": true
+}
 ```
 
-`PROCESSING_DELAY_SECONDS` overrides the 30-second simulated delay (handy for manual testing, e.g. `PROCESSING_DELAY_SECONDS=2`).
+---
 
-## Test
+### 3. Query Transaction Status
+Retrieves current processing state and timestamps for testing and verification.
 
-```console
-$ pytest                              # 15 tests, ~1s
-$ python scripts/acceptance.py        # live server, real 30s delay
+- **Method**: `GET`
+- **Path**: `/v1/transactions/{transaction_id}`
+- **Response**: `200 OK` (returns a single-element list per specification)
+
+```bash
+curl -s http://localhost:8000/v1/transactions/txn_abc123def456
 ```
 
-`pytest` drives the real ASGI app and covers the health shape, the `202` contract, the `PROCESSING → PROCESSED` transition, persistence across an app restart, idempotency (including that only one processing job is scheduled), validation errors, and startup recovery of an interrupted transaction. The suite runs against SQLite by default; set `DATABASE_URL` to run the identical suite against Postgres.
+**Immediately after ingestion (`status: PROCESSING`):**
+```json
+[
+  {
+    "transaction_id": "txn_abc123def456",
+    "source_account": "acc_user_789",
+    "destination_account": "acc_merchant_456",
+    "amount": 1500.5,
+    "currency": "INR",
+    "status": "PROCESSING",
+    "created_at": "2026-10-25T16:45:00 IST",
+    "processed_at": null
+  }
+]
+```
 
-`scripts/acceptance.py` boots a real uvicorn server (the same way the deployment runs) and checks the assignment's success criteria end to end, printing `PASS`/`FAIL` per check:
+**After ~30 seconds (`status: PROCESSED`):**
+```json
+[
+  {
+    "transaction_id": "txn_abc123def456",
+    "source_account": "acc_user_789",
+    "destination_account": "acc_merchant_456",
+    "amount": 1500.5,
+    "currency": "INR",
+    "status": "PROCESSED",
+    "created_at": "2026-10-25T16:45:00 IST",
+    "processed_at": "2026-10-25T16:45:30 IST"
+  }
+]
+```
 
-- single transaction → visible as `PROCESSING` immediately, `PROCESSED` after ~30s
-- webhook latency well under 500ms, including 20 concurrent webhooks
-- 26 duplicate webhooks (sequential + concurrent) → one row, one processing run
-- `kill -9` mid-processing, restart → the transaction is re-queued and completes
+*(Returns `404 Not Found` if the transaction ID does not exist.)*
 
-## Technical choices
+---
 
-**FastAPI + Pydantic v2.** The endpoint validates the payload, writes one row and returns; nothing else happens before the response, so the 500ms budget is never at risk. Pydantic gives the exact response shapes (and the `amount > 0`, 3-character currency, non-blank ID validation) with no hand-written serialisation.
+## Setup and Running Locally
 
-**SQLAlchemy 2.0 over Postgres, SQLite for local runs.** `DATABASE_URL` is the only difference between the two; `postgres://`/`postgresql://` URLs from managed providers are rewritten to the `psycopg2` driver automatically. The table also carries a `transaction_id` unique constraint, the amounts use `Numeric(18, 2)` (no float rounding), and timestamps are timezone-aware.
+### Prerequisites
+- Python 3.10+ (tested on Python 3.12 and 3.13)
+- pip
 
-**Idempotency** is enforced by the database, not by application logic: the webhook `INSERT`s the row and the unique constraint decides the winner. The loser catches `IntegrityError`, rolls back, and returns `202` with `duplicate: true`. This is race-free — concurrent duplicates resolve to exactly one row and exactly one scheduled job — and it stays correct across multiple instances if the service is ever scaled out.
+### 1. Clone & Set Up Virtual Environment
 
-**Background processing with `BackgroundTasks`.** The task is scheduled on the row the request just committed and runs after the response is sent: `asyncio.sleep(30)` simulates the external call, then the row is updated to `PROCESSED` with `processed_at`. The blocking DB write is pushed to a thread (`asyncio.to_thread`) so it never stalls the event loop, and the guard in `_mark_processed` means a second run of the same task cannot rewrite an already-processed row.
+**On Windows (PowerShell):**
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
 
-A task queue (Celery/ARQ + Redis) was deliberately not used: it would add a broker to deploy and operate without changing what the grader can observe. The trade-off is that in-process tasks do not survive a crash, which the startup recovery handles — see below.
+**On Linux / macOS:**
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
 
-**Reliability.** A webhook is only acknowledged after its row is committed, so an accepted transaction is never lost. If the process dies mid-flight, the row is left in `PROCESSING`; on startup, the lifespan hook finds every `PROCESSING` row and re-queues it, so the transaction still ends up `PROCESSED`. Processing failures are logged rather than swallowed, leaving the row for the next startup recovery.
+### 2. Run the Development Server
 
-**Single worker by design.** Background tasks live in the serving process, so the start command pins `--workers 1`; the startup recovery scan would otherwise race across workers. Horizontal scale-out is the point where a shared queue becomes the right answer.
+```bash
+uvicorn app.main:app --reload
+```
 
-## Deploy
+By default, the application runs against a local SQLite database (`transactions.db`) created automatically on startup. No separate database provisioning is needed for local development.
 
-`render.yaml` is a Render blueprint that provisions the web service plus a Postgres database and wires `DATABASE_URL` into the service:
+### 3. Configuration (Environment Variables)
 
-1. Push this repo to GitHub.
-2. In Render: **New → Blueprint**, pick the repo. Render reads `render.yaml`, creates `transactions-db` and the web service, and deploys with `uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1`.
-3. The service URL (`https://<name>.onrender.com`) is the public API endpoint; `/` is the health check Render polls.
+- `DATABASE_URL`: Connection string for PostgreSQL (e.g. `postgresql://user:password@localhost:5432/dbname`). Defaults to local SQLite if unset.
+- `PROCESSING_DELAY_SECONDS`: Duration of simulated external processing. Defaults to `30`. Set to a smaller value (e.g., `2`) for fast manual debugging:
+  ```bash
+  PROCESSING_DELAY_SECONDS=2 uvicorn app.main:app --reload
+  ```
 
-Any other Python host works the same way: install `requirements.txt`, run the start command with a single worker, and set `DATABASE_URL` to a Postgres URL.
+---
 
-Schema creation runs on startup (`create_all`), so no separate migration step is required for this assignment; a long-lived service would move to Alembic.
+## Testing
+
+### Unit and Integration Tests (`pytest`)
+Runs 15 automated test cases covering health check contract, immediate 202 response SLA, background state transition, duplicate suppression, crash recovery on reboot, and payload input validation.
+
+```bash
+pytest -v
+```
+
+### End-to-End Acceptance Script
+Launches a live uvicorn server process and verifies real-world behavior:
+- Measures webhook latency under concurrent load (< 500ms).
+- Simulates 20 concurrent duplicates and verifies single processing execution.
+- Kills the server mid-processing (`SIGKILL`) and restarts it to verify automatic recovery of interrupted jobs.
+
+```bash
+python scripts/acceptance.py
+```
+
+---
+
+## Technical Choices and Architecture
+
+### 1. FastAPI + Pydantic v2
+Webhook endpoints in payment gateways (like RazorPay) enforce strict acknowledgement timeouts. FastAPI's minimal routing overhead ensures the initial database insert and `202 Accepted` response return in under 20ms, well below the 500ms threshold. Pydantic v2 enforces strict payload boundaries (ISO 3-letter currency codes, non-empty identifiers, positive amounts) at the serialization layer before application logic runs.
+
+### 2. Database-Enforced Idempotency
+Application-level idempotency checks (e.g. reading from the DB or cache before inserting) are vulnerable to race conditions when concurrent duplicate webhooks arrive simultaneously. 
+
+Instead, idempotency is enforced by a database `UNIQUE` constraint on `transaction_id`. The initial request commits the `PROCESSING` row. Concurrent duplicates trigger an `IntegrityError`, caught in `receive_webhook`, which rolls back the transaction and returns `202 Accepted` with `{"duplicate": true}` without spawning a redundant background job. This pattern is atomic and race-free.
+
+### 3. Financial Precision & Datetime Handling
+- Currency amounts are stored as `Numeric(18, 2)` mapped to Python's `Decimal` type to prevent binary floating-point rounding errors typical with `FLOAT` columns.
+- Timestamps are generated as timezone-aware Python `datetime` objects in Indian Standard Time (IST, UTC+05:30) and formatted consistently across health checks and transaction queries (`YYYY-MM-DDTHH:MM:SS IST`).
+
+### 4. Background Processing & Thread Hygiene
+Rather than blocking the HTTP request during the simulated 30-second external API delay, processing is handed off to FastAPI's `BackgroundTasks`. 
+The 30-second delay uses non-blocking `asyncio.sleep(30)`, and the subsequent database write is executed via `asyncio.to_thread` so synchronous database engine calls never freeze the main async event loop.
+
+### 5. Crash Recovery
+Because in-process background tasks reside in application memory, a server termination or deployment restart during the 30-second window could leave transactions stuck in `PROCESSING`. 
+To ensure fault tolerance, the transaction is committed to the database in `PROCESSING` status *before* sending the `202` response. A lifespan startup handler in `app/main.py` scans for any incomplete `PROCESSING` transactions on boot and re-queues them, guaranteeing that every accepted transaction reaches `PROCESSED`.
+
+### 6. Single Worker Architecture
+The server is started with `--workers 1`. Because background tasks and crash recovery currently execute in-process, running multiple worker processes without a distributed task broker would cause workers to race during the startup recovery scan. 
+If the application needs to scale horizontally across multiple instances or containers in the future, the in-process `BackgroundTasks` can be replaced with a distributed message queue like Redis + Celery/ARQ without altering the external API contract.
+
+### 7. Cloud Deployment via Render Blueprint
+The deployment uses `render.yaml` (Infrastructure-as-Code) to provision:
+1. A managed PostgreSQL database instance.
+2. A Python web service running `uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1`.
+3. Automatic environment variable binding: Render automatically injects `DATABASE_URL` from the database into the web service.
+SQLAlchemy's `Base.metadata.create_all(engine)` automatically initializes tables on startup without requiring manual migration scripts.

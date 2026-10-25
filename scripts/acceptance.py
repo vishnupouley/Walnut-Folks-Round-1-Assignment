@@ -100,14 +100,14 @@ def main() -> int:
         health = client.get("/").json()
         health_ms = (time.perf_counter() - started) * 1000
         check(
-            "GET / returns HEALTHY with ISO-8601 UTC timestamp",
-            health["status"] == "HEALTHY" and health["current_time"].endswith("Z"),
+            "GET / returns HEALTHY with IST timestamp",
+            health["status"] == "HEALTHY" and health["current_time"].endswith(" IST"),
             f"{health} in {health_ms:.1f}ms",
         )
 
         # --- single transaction, full lifecycle ---------------------------
         txn = "txn_single_" + uuid.uuid4().hex[:8]
-        response, post_ms = webhook(client, txn, amount=150.50, currency="USD")
+        response, post_ms = webhook(client, txn, amount=150.50, currency="INR")
         check(
             "webhook returns 202 Accepted",
             response.status_code == 202,
@@ -123,7 +123,7 @@ def main() -> int:
         )
         check(
             "stored amount/currency match the webhook",
-            immediate["amount"] == 150.50 and immediate["currency"] == "USD",
+            immediate["amount"] == 150.50 and immediate["currency"] == "INR",
             f"amount={immediate['amount']} currency={immediate['currency']}",
         )
 
